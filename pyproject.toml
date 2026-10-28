@@ -1,0 +1,17 @@
+[project]
+name = "self-healing-pipeline"
+version = "0.1.0"
+description = "Deterministic FSM-driven agent for data contract drift repair using DuckDB and SQLGlot"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "duckdb>=0.10.0",
+    "sqlglot>=23.0.0",
+    "pydantic>=2.6.0",
+    "pandas>=2.1.0",
+    "pyarrow>=14.0.0"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

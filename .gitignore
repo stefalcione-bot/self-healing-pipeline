@@ -11,3 +11,5 @@ build/
 EOF
 *.db
 benchmarks/eval_cache.json
+
+.pytest_cache/

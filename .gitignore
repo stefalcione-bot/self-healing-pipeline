@@ -9,3 +9,5 @@ dist/
 build/
 .env
 EOF
+*.db
+benchmarks/eval_cache.json

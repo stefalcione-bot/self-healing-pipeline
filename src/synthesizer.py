@@ -1,5 +1,6 @@
 ﻿import os
 import time
+from pathlib import Path
 from typing import List, Optional
 from dotenv import load_dotenv
 from google import genai
@@ -7,23 +8,28 @@ from google.genai import types
 from src.contracts import DriftDiagnostic
 from src.orchestrator import PatchProposal
 
-load_dotenv()
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(dotenv_path=ROOT_DIR / ".env")
 
 
 class LLMSynthesizer:
     def __init__(
         self,
-        primary_model: str = "gemini-3.8-flash",
+        primary_model: str = "gemini-3.1-flash-lite-preview",
         fallback_models: Optional[List[str]] = None,
     ):
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("GEMINI_API_KEY not found in .env file.")
-        self.client = genai.Client(api_key=api_key)
+            raise ValueError(f"GEMINI_API_KEY not found in .env file at {ROOT_DIR / '.env'}")
+        
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=12000)
+        )
+        # Only use active, free-tier accessible models
         self.models = [primary_model] + (
             fallback_models or [
-                "gemini-3.1-pro-preview",
-                "gemini-3.1-flash-lite-preview",
+                "gemini-3.8-flash"
             ]
         )
 
@@ -37,9 +43,9 @@ STRICT OPERATIONAL RULES:
 3. Every referenced source column MUST exist in the observed schema: {list(diagnostic.observed_schema.keys())}.
 4. Output column names and data types MUST strictly match the expected contract:
 {diagnostic.expected_schema}
-5. If units have changed (e.g., cents vs. dollars), apply the arithmetic transformation and cast to DOUBLE.
+5. If units have changed (e.g., cents vs. dollars), apply arithmetic transformation and cast to DOUBLE.
 6. If a column was renamed, alias the observed column name to the expected column name.
-7. Do not include markdown fences or trailing semicolons in `sql_patch`."""
+7. Return raw JSON without markdown fences."""
 
     def generate_patch(self, diagnostic: DriftDiagnostic, error_history: List[str]) -> PatchProposal:
         system_prompt = self._build_system_prompt(diagnostic)
@@ -59,11 +65,10 @@ Observed Sample Rows (up to 3):
 
         last_error = None
         for model_name in self.models:
-            # Strip any 'gemini/' prefix if passed from older caller code
             clean_model = model_name.replace("gemini/", "")
             for attempt in range(3):
                 try:
-                    print(f"  [Synthesizer] Requesting patch from {clean_model} (attempt {attempt + 1})...")
+                    print(f"  [Synthesizer] Requesting patch from {clean_model} (attempt {attempt + 1})...", flush=True)
                     response = self.client.models.generate_content(
                         model=clean_model,
                         contents=user_content,
@@ -77,13 +82,13 @@ Observed Sample Rows (up to 3):
                 except Exception as e:
                     last_error = e
                     err_str = str(e)
-                    # If model name is not found (404), immediately jump to next fallback model
-                    if "404" in err_str or "NOT_FOUND" in err_str:
-                        print(f"  [Synthesizer] Model {clean_model} unavailable (404), switching model...")
+                    # 429 quota exhaustion or 404: skip model immediately
+                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "404" in err_str:
+                        print(f"  [Synthesizer] {clean_model} quota or not found, skipping to next model...", flush=True)
                         break
-                    # If 503 high demand, wait with exponential backoff before retrying
-                    wait_sec = 2 ** (attempt + 1)
-                    print(f"  [Synthesizer] Temporary error ({err_str[:80]}...). Retrying in {wait_sec}s...")
+                    
+                    wait_sec = 2.5 * (attempt + 1)
+                    print(f"  [Synthesizer] Temporary error on {clean_model}. Waiting {wait_sec}s...", flush=True)
                     time.sleep(wait_sec)
 
-        raise RuntimeError(f"All model endpoints failed after retries. Last error: {last_error}")
+        raise RuntimeError(f"All model endpoints failed after retries: {last_error}")

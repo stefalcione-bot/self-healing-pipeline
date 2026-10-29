@@ -1,5 +1,6 @@
 # Self-Healing Data Pipeline & Autonomous Schema Drift Agent
 
+![CI Status](https://github.com/stefalcione-bot/self-healing-pipeline/actions/workflows/ci.yml/badge.svg)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)
 ![DuckDB](https://img.shields.io/badge/DuckDB-In--Memory_Sandbox-FFF000.svg)
 ![SQLGlot](https://img.shields.io/badge/SQLGlot-AST_Verification-orange.svg)
